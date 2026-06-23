@@ -7,7 +7,13 @@ from bson import ObjectId
 from bson.errors import InvalidId
 
 from app.dependencies import get_database, get_current_user
-from app.schemas.binder import BinderCreateRequest, BinderResponse
+from app.schemas.binder import (
+    BinderCardAddRequest,
+    BinderCardEntry,
+    BinderCreateRequest,
+    BinderDetailResponse,
+    BinderResponse,
+)
 
 router = APIRouter(prefix="/binders", tags=["binders"])
 
@@ -28,6 +34,21 @@ def _to_response(doc: dict) -> BinderResponse:
         slug=doc["slug"],
         created_at=doc["created_at"],
     )
+
+
+async def _get_owned_binder(
+    binder_id: str, owner_id: str, db: AsyncIOMotorDatabase
+) -> dict:
+    try:
+        object_id = ObjectId(binder_id)
+    except InvalidId:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Binder not found")
+
+    binder = await db["binders"].find_one({"_id": object_id})
+    if binder is None or binder["owner_id"] != owner_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Binder not found")
+
+    return binder
 
 
 @router.post("", response_model=BinderResponse, status_code=status.HTTP_201_CREATED)
@@ -61,23 +82,63 @@ async def list_binders(
     return [_to_response(b) for b in binders]
 
 
-@router.get("/{binder_id}", response_model=BinderResponse)
+@router.get("/{binder_id}", response_model=BinderDetailResponse)
 async def get_binder(
     binder_id: str,
     current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    try:
-        object_id = ObjectId(binder_id)
-    except InvalidId:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Binder not found")
+    binder = await _get_owned_binder(binder_id, str(current_user["_id"]), db)
 
-    binder = await db["binders"].find_one({"_id": object_id})
+    entries_cursor = db["binder_cards"].find({"binder_id": binder_id}).sort("position", 1)
+    entries = await entries_cursor.to_list(length=None)
 
-    if binder is None or binder["owner_id"] != str(current_user["_id"]):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Binder not found")
+    card_ids = [e["card_id"] for e in entries]
+    cards_cursor = db["cards"].find({"id": {"$in": card_ids}}, {"_id": 0})
+    cards_by_id = {c["id"]: c async for c in cards_cursor}
 
-    return _to_response(binder)
+    resolved_cards = [
+        BinderCardEntry(position=e["position"], card=cards_by_id[e["card_id"]])
+        for e in entries
+        if e["card_id"] in cards_by_id
+    ]
+
+    response = _to_response(binder).model_dump()
+    response["cards"] = resolved_cards
+    return BinderDetailResponse(**response)
+
+
+@router.post(
+    "/{binder_id}/cards",
+    response_model=BinderCardEntry,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_card_to_binder(
+    binder_id: str,
+    payload: BinderCardAddRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    await _get_owned_binder(binder_id, str(current_user["_id"]), db)
+
+    card = await db["cards"].find_one({"id": payload.card_id}, {"_id": 0})
+    if card is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Card not found")
+
+    last_entry = await db["binder_cards"].find_one(
+        {"binder_id": binder_id}, sort=[("position", -1)]
+    )
+    next_position = (last_entry["position"] + 1) if last_entry else 0
+
+    entry_doc = {
+        "binder_id": binder_id,
+        "card_id": payload.card_id,
+        "position": next_position,
+        "added_at": datetime.now(timezone.utc),
+    }
+    await db["binder_cards"].insert_one(entry_doc)
+
+    return BinderCardEntry(position=next_position, card=card)
 
 
 @router.delete("/{binder_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -86,14 +147,6 @@ async def delete_binder(
     current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    try:
-        object_id = ObjectId(binder_id)
-    except InvalidId:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Binder not found")
-
-    binder = await db["binders"].find_one({"_id": object_id})
-
-    if binder is None or binder["owner_id"] != str(current_user["_id"]):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Binder not found")
-
-    await db["binders"].delete_one({"_id": object_id})
+    binder = await _get_owned_binder(binder_id, str(current_user["_id"]), db)
+    await db["binders"].delete_one({"_id": binder["_id"]})
+    await db["binder_cards"].delete_many({"binder_id": binder_id})

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -15,3 +16,16 @@ class BinderResponse(BaseModel):
     description: str | None
     slug: str
     created_at: datetime
+
+
+class BinderCardAddRequest(BaseModel):
+    card_id: str
+
+
+class BinderCardEntry(BaseModel):
+    position: int
+    card: dict[str, Any]
+
+
+class BinderDetailResponse(BinderResponse):
+    cards: list[BinderCardEntry]
