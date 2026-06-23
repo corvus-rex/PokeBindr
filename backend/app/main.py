@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.database import connect_to_mongo, close_mongo_connection, database
-from app.routers import auth
+from app.routers import auth, cards
 from app.seed import seed_cards
 
 
@@ -18,6 +18,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="PokeBindr API", lifespan=lifespan)
 
 app.include_router(auth.router)
+app.include_router(cards.router)
 
 @app.get("/health")
 def health_check():
