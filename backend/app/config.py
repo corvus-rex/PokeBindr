@@ -11,6 +11,8 @@ class Settings(BaseSettings):
 
     cards_dataset_path: str
 
+    cors_origins: str = "http://localhost:5173"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
