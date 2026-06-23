@@ -39,6 +39,13 @@ class BinderCardUpdate(BaseModel):
     card_id: str
     position: int = Field(ge=0)
 
+class BinderPublicSummary(BaseModel):
+    id: str
+    title: str
+    owner_id: str
+    slug: str
+    created_at: datetime
+    cover_images: list[str]
 
 class BinderUpdateRequest(BaseModel):
     cards: list[BinderCardUpdate]

@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -13,6 +13,7 @@ from app.schemas.binder import (
     BinderCreateRequest,
     BinderUpdateRequest,
     BinderDetailResponse,
+    BinderPublicSummary,
     BinderResponse,
     CardSummary,
 )
@@ -105,6 +106,39 @@ async def list_user_binders(
     ).to_list(length=None)
 
     return [_to_response(b) for b in binders]
+
+@router.get("/public/recent", response_model=list[BinderPublicSummary])
+async def list_recent_public_binders(
+    limit: int = Query(default=5, ge=1, le=20),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    cursor = db["binders"].find().sort("created_at", -1).limit(limit)
+    binders = await cursor.to_list(length=limit)
+
+    results: list[BinderPublicSummary] = []
+    for b in binders:
+        binder_id = str(b["_id"])
+        covers_cursor = (
+            db["binder_cards"]
+            .find({"binder_id": binder_id}, {"_id": 0, "images": 1})
+            .sort("position", 1)
+            .limit(3)
+        )
+        covers = await covers_cursor.to_list(length=3)
+        cover_images = [c["images"]["small"] for c in covers if "images" in c]
+
+        results.append(
+            BinderPublicSummary(
+                id=binder_id,
+                title=b["title"],
+                owner_id=b["owner_id"],
+                slug=b["slug"],
+                created_at=b["created_at"],
+                cover_images=cover_images,
+            )
+        )
+
+    return results
 
 @router.get("/{binder_id}", response_model=BinderDetailResponse)
 async def get_binder(
