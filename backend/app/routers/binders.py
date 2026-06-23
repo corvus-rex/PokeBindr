@@ -11,6 +11,7 @@ from app.schemas.binder import (
     BinderCardAddRequest,
     BinderCardEntry,
     BinderCreateRequest,
+    BinderUpdateRequest,
     BinderDetailResponse,
     BinderResponse,
     CardSummary,
@@ -167,6 +168,82 @@ async def add_card_to_binder(
         card=CardSummary(id=card["id"], name=card["name"], images=card["images"]),
     )
 
+@router.put("/{binder_id}", response_model=BinderDetailResponse)
+async def update_binder(
+    binder_id: str,
+    payload: BinderUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    await _get_owned_binder(
+        binder_id,
+        str(current_user["_id"]),
+        db,
+    )
+
+    positions = [c.position for c in payload.cards]
+
+    if len(positions) != len(set(positions)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Duplicate positions are not allowed",
+        )
+
+    card_ids = [c.card_id for c in payload.cards]
+
+    cards = await db["cards"].find(
+        {"id": {"$in": card_ids}},
+        {"_id": 0, "id": 1, "name": 1, "images": 1},
+    ).to_list(None)
+
+    cards_by_id = {c["id"]: c for c in cards}
+
+    missing = [cid for cid in card_ids if cid not in cards_by_id]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown card ids: {missing}",
+        )
+
+    await db["binder_cards"].delete_many({"binder_id": binder_id})
+
+    if payload.cards:
+        docs = []
+
+        for entry in payload.cards:
+            card = cards_by_id[entry.card_id]
+
+            docs.append(
+                {
+                    "binder_id": binder_id,
+                    "card_id": card["id"],
+                    "name": card["name"],
+                    "images": card["images"],
+                    "position": entry.position,
+                    "added_at": datetime.now(timezone.utc),
+                }
+            )
+
+        await db["binder_cards"].insert_many(docs)
+
+    binder = await _get_binder_or_404(binder_id, db)
+
+    resolved_cards = [
+        BinderCardEntry(
+            position=e.position,
+            card=CardSummary(
+                id=cards_by_id[e.card_id]["id"],
+                name=cards_by_id[e.card_id]["name"],
+                images=cards_by_id[e.card_id]["images"],
+            ),
+        )
+        for e in payload.cards
+    ]
+
+    response = _to_response(binder).model_dump()
+    response["cards"] = resolved_cards
+
+    return BinderDetailResponse(**response)
 
 @router.delete("/{binder_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_binder(

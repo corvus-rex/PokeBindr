@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class BinderCreateRequest(BaseModel):
@@ -28,9 +28,17 @@ class CardSummary(BaseModel):
 
 
 class BinderCardEntry(BaseModel):
-    position: int
+    position: int = Field(ge=0)
     card: CardSummary
 
 
 class BinderDetailResponse(BinderResponse):
     cards: list[BinderCardEntry]
+
+class BinderCardUpdate(BaseModel):
+    card_id: str
+    position: int = Field(ge=0)
+
+
+class BinderUpdateRequest(BaseModel):
+    cards: list[BinderCardUpdate]
