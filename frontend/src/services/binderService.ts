@@ -54,4 +54,11 @@ export const binderService = {
   async remove(id: string): Promise<void> {
     await apiFetch<void>(`/binders/${id}`, { method: 'DELETE', headers: authHeaders() })
   },
+  async update(id: string, cards: { card_id: string; position: number }[]): Promise<BinderDetail> {
+    return apiFetch<BinderDetail>(`/binders/${id}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ cards }),
+    })
+  },
 }

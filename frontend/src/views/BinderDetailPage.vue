@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { binderService, type BinderDetail } from '../services/binderService'
+import { authStore } from '../stores/auth'
 import ErrorState from '../components/ErrorState.vue'
 import EmptyState from '../components/EmptyState.vue'
 
 const route = useRoute()
 const status = ref<'loading' | 'ready' | 'error'>('loading')
 const binder = ref<BinderDetail | null>(null)
+const isAuthenticated = computed(() => authStore.isAuthenticated())
 
 function ownerLabel(ownerId: string): string {
   return `Collector #${ownerId.slice(-6).toUpperCase()}`
@@ -33,8 +35,19 @@ onMounted(load)
 
     <template v-else-if="binder">
       <header class="binder-page__header">
-        <span class="eyebrow">Binder</span>
-        <h1>{{ binder.title }}</h1>
+        <div class="binder-page__title-row">
+          <div>
+            <span class="eyebrow">Binder</span>
+            <h1>{{ binder.title }}</h1>
+          </div>
+          <router-link
+            v-if="isAuthenticated"
+            :to="`/binders/${binder.id}/edit`"
+            class="btn btn-primary binder-page__edit-btn"
+          >
+            Edit cards
+          </router-link>
+        </div>
         <p v-if="binder.description" class="binder-page__description">{{ binder.description }}</p>
         <span class="binder-page__owner">by {{ ownerLabel(binder.owner_id) }}</span>
       </header>
@@ -59,7 +72,9 @@ onMounted(load)
 .binder-page { padding: var(--space-7) var(--space-5); display: flex; flex-direction: column; gap: var(--space-6); }
 .binder-page__loading { color: var(--color-text-muted); padding: var(--space-7) 0; }
 .binder-page__header { display: flex; flex-direction: column; gap: var(--space-2); border-bottom: 1px solid var(--color-border); padding-bottom: var(--space-5); }
+.binder-page__title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
 .binder-page__header h1 { font-size: 1.8rem; }
+.binder-page__edit-btn { font-size: 0.85rem; padding: var(--space-2) var(--space-4); flex: none; }
 .binder-page__description { color: var(--color-text-muted); max-width: 540px; }
 .binder-page__owner { font-family: var(--font-mono); font-size: 0.78rem; color: var(--color-text-faint); }
 

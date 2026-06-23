@@ -4,6 +4,7 @@ import LoginPage from '../views/LoginPage.vue'
 import RegisterPage from '../views/RegisterPage.vue'
 import DashboardPage from '../views/DashboardPage.vue'
 import BinderDetailPage from '../views/BinderDetailPage.vue'
+import BinderEditorPage from '../views/BinderEditorPage.vue'
 import { authStore } from '../stores/auth'
 
 const router = createRouter({
@@ -16,6 +17,12 @@ const router = createRouter({
       path: '/dashboard',
       name: 'dashboard',
       component: DashboardPage,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/binders/:id/edit',
+      name: 'binder-editor',
+      component: BinderEditorPage,
       meta: { requiresAuth: true },
     },
     { path: '/binders/:id', name: 'binder-detail', component: BinderDetailPage },
