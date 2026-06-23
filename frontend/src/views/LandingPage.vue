@@ -18,7 +18,7 @@ function ownerLabel(ownerId: string): string {
 async function loadRecent() {
   status.value = 'loading'
   try {
-    const result = await binderService.listRecentPublic(5)
+    const result = await binderService.listRecentPublic(8)
     recentBinders.value = result
     status.value = result.length === 0 ? 'empty' : 'ready'
   } catch {
@@ -61,7 +61,7 @@ onMounted(loadRecent)
       </div>
 
       <div v-if="status === 'loading'" class="binder-grid">
-        <BinderCardSkeleton v-for="n in 5" :key="n" />
+        <BinderCardSkeleton v-for="n in 8" :key="n" />
       </div>
 
       <ErrorState v-else-if="status === 'error'" @retry="loadRecent" message="Couldn't load recent binders." />

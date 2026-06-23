@@ -109,7 +109,7 @@ async def list_user_binders(
 
 @router.get("/public/recent", response_model=list[BinderPublicSummary])
 async def list_recent_public_binders(
-    limit: int = Query(default=5, ge=1, le=20),
+    limit: int = Query(default=8, ge=1, le=20),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     cursor = db["binders"].find().sort("created_at", -1).limit(limit)
