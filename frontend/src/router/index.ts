@@ -3,6 +3,7 @@ import LandingPage from '../views/LandingPage.vue'
 import LoginPage from '../views/LoginPage.vue'
 import RegisterPage from '../views/RegisterPage.vue'
 import DashboardPage from '../views/DashboardPage.vue'
+import BinderDetailPage from '../views/BinderDetailPage.vue'
 import { authStore } from '../stores/auth'
 
 const router = createRouter({
@@ -17,6 +18,7 @@ const router = createRouter({
       component: DashboardPage,
       meta: { requiresAuth: true },
     },
+    { path: '/binders/:id', name: 'binder-detail', component: BinderDetailPage },
   ],
 })
 
