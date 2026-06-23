@@ -4,8 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.dependencies import get_database
-from app.schemas.user import UserRegisterRequest, UserResponse
-from app.security import hash_password
+from app.schemas.user import (
+    TokenResponse,
+    UserLoginRequest,
+    UserRegisterRequest,
+    UserResponse,
+)
+from app.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -35,3 +40,26 @@ async def register(
         email=user_doc["email"],
         created_at=user_doc["created_at"],
     )
+
+
+@router.post("/login", response_model=TokenResponse)
+async def login(
+    payload: UserLoginRequest,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    user = await db["users"].find_one({"email": payload.email})
+
+    invalid_credentials_error = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid email or password",
+    )
+
+    if user is None:
+        raise invalid_credentials_error
+
+    if not verify_password(payload.password, user["password_hash"]):
+        raise invalid_credentials_error
+
+    access_token = create_access_token(subject=str(user["_id"]))
+
+    return TokenResponse(access_token=access_token)
