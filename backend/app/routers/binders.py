@@ -13,6 +13,7 @@ from app.schemas.binder import (
     BinderCreateRequest,
     BinderDetailResponse,
     BinderResponse,
+    CardSummary,
 )
 
 router = APIRouter(prefix="/binders", tags=["binders"])
@@ -36,17 +37,29 @@ def _to_response(doc: dict) -> BinderResponse:
     )
 
 
-async def _get_owned_binder(
-    binder_id: str, owner_id: str, db: AsyncIOMotorDatabase
-) -> dict:
+async def _get_binder_or_404(binder_id: str, db: AsyncIOMotorDatabase) -> dict:
     try:
         object_id = ObjectId(binder_id)
     except InvalidId:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Binder not found")
 
     binder = await db["binders"].find_one({"_id": object_id})
-    if binder is None or binder["owner_id"] != owner_id:
+    if binder is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Binder not found")
+
+    return binder
+
+
+async def _get_owned_binder(
+    binder_id: str, owner_id: str, db: AsyncIOMotorDatabase
+) -> dict:
+    binder = await _get_binder_or_404(binder_id, db)
+
+    if binder["owner_id"] != owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this binder",
+        )
 
     return binder
 
@@ -81,26 +94,33 @@ async def list_binders(
     binders = await cursor.to_list(length=None)
     return [_to_response(b) for b in binders]
 
+@router.get("/users/{user_id}", response_model=list[BinderResponse])
+async def list_user_binders(
+    user_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    binders = await db["binders"].find(
+        {"owner_id": user_id}
+    ).to_list(length=None)
+
+    return [_to_response(b) for b in binders]
 
 @router.get("/{binder_id}", response_model=BinderDetailResponse)
 async def get_binder(
     binder_id: str,
-    current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    binder = await _get_owned_binder(binder_id, str(current_user["_id"]), db)
+    binder = await _get_binder_or_404(binder_id, db)
 
     entries_cursor = db["binder_cards"].find({"binder_id": binder_id}).sort("position", 1)
     entries = await entries_cursor.to_list(length=None)
 
-    card_ids = [e["card_id"] for e in entries]
-    cards_cursor = db["cards"].find({"id": {"$in": card_ids}}, {"_id": 0})
-    cards_by_id = {c["id"]: c async for c in cards_cursor}
-
     resolved_cards = [
-        BinderCardEntry(position=e["position"], card=cards_by_id[e["card_id"]])
+        BinderCardEntry(
+            position=e["position"],
+            card=CardSummary(id=e["card_id"], name=e["name"], images=e["images"]),
+        )
         for e in entries
-        if e["card_id"] in cards_by_id
     ]
 
     response = _to_response(binder).model_dump()
@@ -121,7 +141,9 @@ async def add_card_to_binder(
 ):
     await _get_owned_binder(binder_id, str(current_user["_id"]), db)
 
-    card = await db["cards"].find_one({"id": payload.card_id}, {"_id": 0})
+    card = await db["cards"].find_one(
+        {"id": payload.card_id}, {"_id": 0, "id": 1, "name": 1, "images": 1}
+    )
     if card is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Card not found")
 
@@ -132,13 +154,18 @@ async def add_card_to_binder(
 
     entry_doc = {
         "binder_id": binder_id,
-        "card_id": payload.card_id,
+        "card_id": card["id"],
+        "name": card["name"],
+        "images": card["images"],
         "position": next_position,
         "added_at": datetime.now(timezone.utc),
     }
     await db["binder_cards"].insert_one(entry_doc)
 
-    return BinderCardEntry(position=next_position, card=card)
+    return BinderCardEntry(
+        position=next_position,
+        card=CardSummary(id=card["id"], name=card["name"], images=card["images"]),
+    )
 
 
 @router.delete("/{binder_id}", status_code=status.HTTP_204_NO_CONTENT)

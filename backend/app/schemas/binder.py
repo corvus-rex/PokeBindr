@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel
 
@@ -22,9 +21,15 @@ class BinderCardAddRequest(BaseModel):
     card_id: str
 
 
+class CardSummary(BaseModel):
+    id: str
+    name: str
+    images: dict[str, str]
+
+
 class BinderCardEntry(BaseModel):
     position: int
-    card: dict[str, Any]
+    card: CardSummary
 
 
 class BinderDetailResponse(BinderResponse):
