@@ -9,7 +9,11 @@ import EmptyState from '../components/EmptyState.vue'
 const route = useRoute()
 const status = ref<'loading' | 'ready' | 'error'>('loading')
 const binder = ref<BinderDetail | null>(null)
-const isAuthenticated = computed(() => authStore.isAuthenticated())
+const isOwner = computed(() => {
+  if (!binder.value) return false
+  const userId = authStore.getUserId()
+  return userId !== null && binder.value.owner_id === userId
+})
 
 function ownerLabel(ownerId: string): string {
   return `Collector #${ownerId.slice(-6).toUpperCase()}`
@@ -41,7 +45,7 @@ onMounted(load)
             <h1>{{ binder.title }}</h1>
           </div>
           <router-link
-            v-if="isAuthenticated"
+            v-if="isOwner"
             :to="`/binders/${binder.id}/edit`"
             class="btn btn-primary binder-page__edit-btn"
           >

@@ -18,4 +18,15 @@ export const authStore = {
   isAuthenticated(): boolean {
     return tokenRef.value !== null
   },
+  getUserId(): string | null {
+    const token = tokenRef.value
+    if (!token) return null
+    try {
+      const payload = token.split('.')[1]
+      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/')
+      return JSON.parse(atob(base64)).sub as string
+    } catch {
+      return null
+    }
+  },
 }
