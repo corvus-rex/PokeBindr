@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     cards_dataset_path: str
 
     cors_origins: str = "http://localhost:5173,https://pokebindr.netlify.app/"
+    max_request_body_size: int = 50 * 1024 * 1024
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
