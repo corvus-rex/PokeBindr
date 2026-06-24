@@ -97,6 +97,7 @@ function onDragLeaveSlot() {
 
 function onDropOnSlot(event: DragEvent, pageIndex: number, slotIndex: number) {
   event.preventDefault()
+  event.stopPropagation()
   dragOverSlotKey.value = null
   isDragActive.value = false
   dragIsFromBinder.value = false
@@ -119,14 +120,26 @@ function onDropOnSlot(event: DragEvent, pageIndex: number, slotIndex: number) {
   }
 }
 
-function onDragOverRemove(event: DragEvent) {
+function removeCardFromSlot(data: {
+  type: 'search' | 'slot'
+  card: CardSummary
+  sourcePageIndex?: number
+  sourceSlotIndex?: number
+}) {
+  if (data.type !== 'slot') return
+  if (data.sourcePageIndex === undefined || data.sourceSlotIndex === undefined) return
+  setSlot(data.sourcePageIndex, data.sourceSlotIndex, null)
+}
+
+function onDragOverBinder(event: DragEvent) {
+  if (!dragIsFromBinder.value) return
   event.preventDefault()
   if (event.dataTransfer) {
     event.dataTransfer.dropEffect = 'move'
   }
 }
 
-function onDropToRemove(event: DragEvent) {
+function onDropOnBinder(event: DragEvent) {
   event.preventDefault()
   isDragActive.value = false
   dragIsFromBinder.value = false
@@ -135,9 +148,9 @@ function onDropToRemove(event: DragEvent) {
   if (!raw) return
 
   const data = parseDragData(raw)
-  if (!data || data.type !== 'slot') return
+  if (!data) return
 
-  setSlot(data.sourcePageIndex!, data.sourceSlotIndex!, null)
+  removeCardFromSlot(data)
 }
 
 function onDragEnd() {
@@ -271,8 +284,13 @@ onMounted(loadBinder)
           <CardSearchPanel />
         </div>
 
-        <div class="editor__binder">
-          <div class="editor__pagination">
+        <div
+          class="editor__binder"
+          :class="{ 'editor__binder--remove-active': isDragActive && dragIsFromBinder }"
+          @dragover="onDragOverBinder"
+          @drop="onDropOnBinder"
+        >
+          <div class="editor__pagination" @dragover.stop @drop.stop>
             <button
               class="btn btn-ghost editor__page-btn"
               :disabled="currentPageIndex === 0"
@@ -329,12 +347,10 @@ onMounted(loadBinder)
           </div>
 
           <div
-            class="editor__remove-zone"
-            :class="{ 'editor__remove-zone--active': isDragActive && dragIsFromBinder }"
-            @dragover="onDragOverRemove"
-            @drop="onDropToRemove"
+            v-if="isDragActive && dragIsFromBinder"
+            class="editor__remove-hint"
           >
-            Drop card here to remove
+            Drop outside the grid to remove card
           </div>
         </div>
       </div>
@@ -456,6 +472,16 @@ onMounted(loadBinder)
   align-items: center;
   gap: var(--space-5);
   min-width: 0;
+  border-radius: var(--radius-lg);
+  border: 2px solid transparent;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  padding: var(--space-3);
+  margin: calc(var(--space-3) * -1);
+}
+
+.editor__binder--remove-active {
+  border-color: var(--color-danger);
+  background: rgba(226, 87, 76, 0.04);
 }
 
 .editor__pagination {
@@ -541,23 +567,17 @@ onMounted(loadBinder)
   user-select: none;
 }
 
-.editor__remove-zone {
-  width: 100%;
-  max-width: 520px;
-  padding: var(--space-4);
-  border: 2px dashed var(--color-border);
-  border-radius: var(--radius-md);
-  text-align: center;
-  color: var(--color-text-faint);
-  font-size: 0.85rem;
+.editor__remove-hint {
+  font-size: 0.82rem;
   font-family: var(--font-mono);
-  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
-}
-
-.editor__remove-zone--active {
-  border-color: var(--color-danger);
-  background: rgba(226, 87, 76, 0.06);
   color: var(--color-danger);
+  padding: var(--space-2) var(--space-4);
+  border: 1px dashed var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: rgba(226, 87, 76, 0.06);
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
 }
 
 @media (max-width: 800px) {
@@ -571,8 +591,9 @@ onMounted(loadBinder)
     gap: var(--space-2);
   }
 
-  .editor__remove-zone {
-    max-width: 100%;
+  .editor__binder--remove-active {
+    border-color: transparent;
+    background: rgba(226, 87, 76, 0.06);
   }
 }
 </style>
